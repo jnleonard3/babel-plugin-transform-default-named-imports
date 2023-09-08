@@ -13,6 +13,7 @@ export type Options = {
     silent?: boolean;
     verbose?: boolean;
     monorepo?: boolean | string;
+    remapDefaultTest?: (string | RegExp)[];
   };
 };
 
@@ -32,6 +33,7 @@ const _metadata: {
     transformed: string[];
     iTests: RegExp[];
     eTests: RegExp[];
+    rdTests: RegExp[];
   };
 } = {};
 
@@ -87,7 +89,8 @@ const getMetadata = (state: State) => {
         getDefaultInclusionTests(state.opts.monorepo ?? false)),
       ...(state.opts.include?.map(strToRegex) || [])
     ],
-    eTests: state.opts.exclude?.map(strToRegex) || []
+    eTests: state.opts.exclude?.map(strToRegex) || [],
+    rdTests: state.opts.remapDefaultTest?.map(strToRegex) || [],
   });
 };
 
@@ -121,7 +124,9 @@ export default function (): PluginObj<State> {
       ImportDeclaration(path, state) {
         const source = path.node.source.value;
 
-        getMetadata(state).total++;
+        const metadata = getMetadata(state);
+
+        metadata.total++;
 
         if (!isCjs(source, state)) return;
 
@@ -138,16 +143,27 @@ export default function (): PluginObj<State> {
               ? node.imported.value
               : node.imported.name;
 
-            if (name == 'default') specifiers.implicitDefault = node.local.name;
+            const isDefaultImport = name == 'default';
+            const remapDefaultKey = isDefaultImport && metadata.rdTests.some((r) => r.test(source));
 
-            if (name != 'default' || specifiers.explicitDefault) {
+            if (isDefaultImport && !remapDefaultKey) specifiers.implicitDefault = node.local.name;
+
+            if (!isDefaultImport || (isDefaultImport && remapDefaultKey) || specifiers.explicitDefault) {
               specifiers.named.push({
                 actual: name,
                 alias: name != node.local.name ? node.local.name : null
               });
             }
-          } else if (util.isImportDefaultSpecifier(node))
-            specifiers.explicitDefault = node.local.name;
+          } else if (util.isImportDefaultSpecifier(node)) {
+            const remapDefaultKey = metadata.rdTests.some((r) => r.test(source));
+
+            if (remapDefaultKey) {
+              specifiers.named.push({
+                actual: 'default',
+                alias: node.local.name
+              });
+            } else specifiers.explicitDefault = node.local.name;
+          }
           else if (util.isImportNamespaceSpecifier(node))
             specifiers.namespace = node.local.name;
         });

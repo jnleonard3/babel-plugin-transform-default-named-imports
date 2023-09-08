@@ -114,7 +114,8 @@ module.exports = {
         transformBuiltins: true, // ◄ match all built-in modules
         silent: true, // ◄ output results to stdout if silent == false
         verbose: false, // ◄ output detailed results if silent == false
-        monorepo: false // ◄ enable this plugin to work in a monorepo context
+        monorepo: false, // ◄ enable this plugin to work in a monorepo context
+        remapDefaultTest: [], // ◄ modules to remap the default import into the destructed assignment
       }
     ]
   ]
